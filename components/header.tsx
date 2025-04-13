@@ -28,8 +28,6 @@ export default function Header({ toggleSidebar, username, language }: HeaderProp
     // Simulate notifications
     setNotifications([
       { id: 1, message: t["welcome-dashboard"], read: false },
-      { id: 2, message: t["new-violation"], read: false },
-      { id: 3, message: t["system-updated"], read: true },
     ]);
   }, [language, t]);
 

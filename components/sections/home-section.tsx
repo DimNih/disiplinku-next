@@ -1,16 +1,15 @@
-"use client"
+"use client";
 
-import { useState, useEffect, useRef } from "react"
-import { Chart, registerables } from "chart.js"
-import { translations } from "@/lib/translations"
-import { db } from "@/lib/firebase"
-import { ref, get } from "firebase/database"
+import { useState, useEffect, useRef } from "react";
+import { Chart, registerables } from "chart.js";
+import { useToast } from "@/contexts/toast-context";
+import { translations } from "@/lib/translations";
 
 // Register Chart.js components
-Chart.register(...registerables)
+Chart.register(...registerables);
 
 interface HomeProps {
-  language: string
+  language: string;
 }
 
 export default function HomeSection({ language }: HomeProps) {
@@ -18,132 +17,146 @@ export default function HomeSection({ language }: HomeProps) {
     osisOnline: 0,
     totalPelanggar: 0,
     totalSiswa: 0,
-  })
+  });
   const [violationData, setViolationData] = useState<{ labels: string[]; data: number[] }>({
     labels: [],
     data: [],
-  })
+  });
   const [classData, setClassData] = useState<{ labels: string[]; data: number[] }>({
     labels: [],
     data: [],
-  })
-  const [isLoading, setIsLoading] = useState(true)
-  const violationChartRef = useRef<Chart | null>(null)
-  const studentChartRef = useRef<Chart | null>(null)
+  });
+  const [isLoading, setIsLoading] = useState(true);
+  const violationChartRef = useRef<Chart | null>(null);
+  const studentChartRef = useRef<Chart | null>(null);
 
-  const t = translations[language as keyof typeof translations] || translations.id
+  const t = translations[language as keyof typeof translations] || translations.id;
+  const { showToast } = useToast();
 
   useEffect(() => {
     // Load dashboard data
-    loadDashboard()
+    loadDashboard();
 
     // Cleanup charts on unmount
     return () => {
       if (violationChartRef.current) {
-        violationChartRef.current.destroy()
+        violationChartRef.current.destroy();
       }
       if (studentChartRef.current) {
-        studentChartRef.current.destroy()
+        studentChartRef.current.destroy();
       }
-    }
-  }, [])
+    };
+  }, []);
 
   useEffect(() => {
-    // Reinitialize charts when language changes or data is loaded
+    // Reinitialize charts when language or data changes
     if (!isLoading) {
-      initCharts()
+      initCharts();
     }
-  }, [language, violationData, classData, isLoading])
+  }, [language, violationData, classData, isLoading]);
 
   const loadDashboard = async () => {
-    setIsLoading(true)
+    setIsLoading(true);
     try {
-      // Load OSIS data directly from Firebase
-      const osisRef = ref(db, "user-name-admin")
-      const osisSnapshot = await get(osisRef)
-      const osisData = osisSnapshot.val() || {}
-      const osisMembers = Object.values(osisData) as any[]
-      const osisOnlineCount = osisMembers.filter((user: any) => user.isOnline).length
+      // Ambil data OSIS (diasumsikan dari /api/osis)
+      let osisOnlineCount = 0;
+      try {
+        const osisResponse = await fetch("/api/osis", { credentials: "include" });
+        if (osisResponse.ok) {
+          const osisData = await osisResponse.json();
+          osisOnlineCount = osisData.filter((user: any) => user.isOnline).length;
+          console.log(`OSIS Online: ${osisOnlineCount}`);
+        } else {
+          console.warn("Gagal mengambil data OSIS: ", osisResponse.status);
+        }
+      } catch (err) {
+        console.warn("Endpoint /api/osis tidak tersedia, menggunakan default 0");
+      }
 
-      // Load pelanggaran data
-      const pelanggaranRef = ref(db, "pelanggaran")
-      const pelanggaranSnapshot = await get(pelanggaranRef)
-      const pelanggaranData = pelanggaranSnapshot.val() || {}
+      // Ambil daftar tanggal dari /api/dates
+      const datesResponse = await fetch("/api/dates", { credentials: "include" });
+      if (!datesResponse.ok) {
+        throw new Error(t["error-mengambil-tanggal"] || "Gagal mengambil tanggal");
+      }
+      const dates = await datesResponse.json();
+      console.log(`Tanggal dari /api/dates: ${JSON.stringify(dates)}`);
 
-      // Count total violations
-      let totalPelanggar = 0
-      const violationsByMonth: Record<string, number> = {}
+      // Gunakan tanggal terbaru atau default
+      const date = dates[0]?.date || "2025-04-09";
 
-      // Initialize months (ensure all months are represented)
-      const months = t["months"].split(",")
-      months.forEach((month, index) => {
-        violationsByMonth[month.trim()] = 0
-      })
+      // Ambil data pelanggaran dari /api/students/[date]
+      const pelanggaranResponse = await fetch(`/api/students/${date}`, {
+        credentials: "include",
+      });
+      if (!pelanggaranResponse.ok) {
+        const errorData = await pelanggaranResponse.json();
+        throw new Error(errorData.error || t["error-mengambil-siswa"] || "Gagal mengambil data pelanggaran");
+      }
+      const pelanggaranList = await pelanggaranResponse.json();
+      console.log(`Pelanggaran dari /api/students/${date}: ${JSON.stringify(pelanggaranList)}`);
 
-      // Process violation data
-      Object.keys(pelanggaranData).forEach((date) => {
-        const dateObj = new Date(date)
-        const monthIndex = dateObj.getMonth()
-        const monthName = months[monthIndex]
+      // Hitung total pelanggar
+      const totalPelanggar = pelanggaranList.length;
 
-        const dateViolations = Object.keys(pelanggaranData[date] || {}).length
-        totalPelanggar += dateViolations
-
-        // Increment the count for this month
-        violationsByMonth[monthName] = (violationsByMonth[monthName] || 0) + dateViolations
-      })
-
-      // Prepare data for chart
-      const violationLabels = Object.keys(violationsByMonth)
-      const violationCounts = Object.values(violationsByMonth)
+      // Hitung pelanggaran per jenis
+      const violationsByType: Record<string, number> = {};
+      pelanggaranList.forEach((p: any) => {
+        const jenis = p.jenisPelanggaran || t["unknown-violation"];
+        violationsByType[jenis] = (violationsByType[jenis] || 0) + 1;
+      });
 
       setViolationData({
-        labels: violationLabels,
-        data: violationCounts,
-      })
+        labels: Object.keys(violationsByType),
+        data: Object.values(violationsByType),
+      });
 
-      // Load siswa data
-      const siswaRef = ref(db, "siswa-i")
-      const siswaSnapshot = await get(siswaRef)
-      const siswaData = siswaSnapshot.val() || {}
-      const siswaList = Object.values(siswaData) as any[]
+      // Ambil data siswa dari /api/siswa
+      const siswaResponse = await fetch("/api/siswa", { credentials: "include" });
+      if (!siswaResponse.ok) {
+        const errorData = await siswaResponse.json();
+        throw new Error(errorData.error || t["error-mengambil-siswa"] || "Gagal mengambil data siswa");
+      }
+      const siswaList = await siswaResponse.json();
+      console.log(`Siswa dari /api/siswa: ${JSON.stringify(siswaList)}`);
 
-      // Count students by class
-      const classCounts: Record<string, number> = {}
-
-      siswaList.forEach((siswa: any) => {
-        const kelas = siswa.kelas || t["unknown-class"]
-        classCounts[kelas] = (classCounts[kelas] || 0) + 1
-      })
-
-      // Prepare data for chart
-      const classLabels = Object.keys(classCounts)
-      const classCounts2 = Object.values(classCounts)
+      // Hitung siswa per kelas
+      const classCounts: Record<string, number> = {};
+      siswaList.forEach((s: any) => {
+        const kelas = s.kelas || t["unknown-class"];
+        classCounts[kelas] = (classCounts[kelas] || 0) + 1;
+      });
 
       setClassData({
-        labels: classLabels,
-        data: classCounts2,
-      })
+        labels: Object.keys(classCounts),
+        data: Object.values(classCounts),
+      });
 
       setStats({
         osisOnline: osisOnlineCount,
         totalPelanggar,
         totalSiswa: siswaList.length,
-      })
-    } catch (error) {
-      console.error("Error loading dashboard:", error)
+      });
+
+      if (siswaList.length === 0) {
+        showToast(t["info"], t["tidak-ada-siswa"] || "Tidak ada data siswa ditemukan", "info");
+      }
+      if (pelanggaranList.length === 0) {
+        showToast(t["info"], t["tidak-ada-pelanggaran"] || "Tidak ada data pelanggaran untuk tanggal ini", "info");
+      }
+    } catch (error: any) {
+      console.error("Error memuat dashboard:", error);
+      showToast(t["error"], error.message || t["error-mengambil-data"] || "Gagal memuat data dashboard", "error");
     } finally {
-      setIsLoading(false)
+      setIsLoading(false);
     }
-  }
+  };
 
   const initCharts = () => {
     // Violation chart
-    const violationCtx = document.getElementById("violationChart") as HTMLCanvasElement
+    const violationCtx = document.getElementById("violationChart") as HTMLCanvasElement;
     if (violationCtx) {
-      // Destroy previous chart instance if it exists
       if (violationChartRef.current) {
-        violationChartRef.current.destroy()
+        violationChartRef.current.destroy();
       }
 
       violationChartRef.current = new Chart(violationCtx, {
@@ -163,19 +176,18 @@ export default function HomeSection({ language }: HomeProps) {
         options: {
           scales: { y: { beginAtZero: true } },
           responsive: true,
+          maintainAspectRatio: false,
         },
-      })
+      });
     }
 
     // Student chart
-    const studentCtx = document.getElementById("studentChart") as HTMLCanvasElement
+    const studentCtx = document.getElementById("studentChart") as HTMLCanvasElement;
     if (studentCtx) {
-      // Destroy previous chart instance if it exists
       if (studentChartRef.current) {
-        studentChartRef.current.destroy()
+        studentChartRef.current.destroy();
       }
 
-      // Generate colors for each class
       const backgroundColors = classData.labels.map((_, index) => {
         const colors = [
           "rgba(249, 115, 22, 0.6)",
@@ -183,9 +195,9 @@ export default function HomeSection({ language }: HomeProps) {
           "rgba(107, 114, 128, 0.6)",
           "rgba(16, 185, 129, 0.6)",
           "rgba(236, 72, 153, 0.6)",
-        ]
-        return colors[index % colors.length]
-      })
+        ];
+        return colors[index % colors.length];
+      });
 
       const borderColors = classData.labels.map((_, index) => {
         const colors = [
@@ -194,9 +206,9 @@ export default function HomeSection({ language }: HomeProps) {
           "rgba(107, 114, 128, 1)",
           "rgba(16, 185, 129, 1)",
           "rgba(236, 72, 153, 1)",
-        ]
-        return colors[index % colors.length]
-      })
+        ];
+        return colors[index % colors.length];
+      });
 
       studentChartRef.current = new Chart(studentCtx, {
         type: "pie",
@@ -214,79 +226,80 @@ export default function HomeSection({ language }: HomeProps) {
         },
         options: {
           responsive: true,
+          maintainAspectRatio: false,
         },
-      })
+      });
     }
-  }
+  };
 
   return (
-    <div id="home" className="section">
+    <div id="home" className="section p-6">
       <h2 className="text-2xl font-semibold text-blue-600 mb-6 text-center flex items-center justify-center">
         <i className="material-icons mr-2 text-orange-400">dashboard</i>
         {t["dashboard"]}
       </h2>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
-        <div className="stats-card">
-          <div className="flex items-center justify-between">
-            <div>
-              <h3 className="flex items-center mb-2">{t["osis-online"]}</h3>
-              <p className="animate-pulse">{stats.osisOnline}</p>
+      {isLoading ? (
+        <div className="flex justify-center items-center h-40">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+        </div>
+      ) : (
+        <>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
+            <div className="stats-card bg-white dark:bg-gray-800 p-4 rounded-lg shadow-md">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="flex items-center mb-2 text-foreground">{t["osis-online"]}</h3>
+                  <p className="text-2xl font-bold text-blue-600">{stats.osisOnline}</p>
+                </div>
+                <i className="material-icons text-orange-400">group_work</i>
+              </div>
             </div>
-            <i className="material-icons">group_work</i>
+
+            <div className="stats-card bg-white dark:bg-gray-800 p-4 rounded-lg shadow-md">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="flex items-center mb-2 text-foreground">{t["total-pelanggar"]}</h3>
+                  <p className="text-2xl font-bold text-blue-600">{stats.totalPelanggar}</p>
+                </div>
+                <i className="material-icons text-orange-400">report</i>
+              </div>
+            </div>
+
+            <div className="stats-card bg-white dark:bg-gray-800 p-4 rounded-lg shadow-md">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="flex items-center mb-2 text-foreground">{t["jumlah-siswa"]}</h3>
+                  <p className="text-2xl font-bold text-blue-600">{stats.totalSiswa}</p>
+                </div>
+                <i className="material-icons text-orange-400">people_alt</i>
+              </div>
+            </div>
           </div>
-        </div>
 
-        <div className="stats-card">
-          <div className="flex items-center justify-between">
-            <div>
-              <h3 className="flex items-center mb-2">{t["total-pelanggar"]}</h3>
-              <p className="animate-pulse">{stats.totalPelanggar}</p>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-md">
+              <h3 className="text-lg font-medium text-foreground mb-4 flex items-center">
+                <i className="material-icons mr-2 text-orange-400">bar_chart</i>
+                {t["statistik-pelanggaran"]}
+              </h3>
+              <div className="h-64">
+                <canvas id="violationChart"></canvas>
+              </div>
             </div>
-            <i className="material-icons">report</i>
+
+            <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-md">
+              <h3 className="text-lg font-medium text-foreground mb-4 flex items-center">
+                <i className="material-icons mr-2 text-orange-400">pie_chart</i>
+                {t["jumlah-siswa-per-kelas"]}
+              </h3>
+              <div className="h-64">
+                <canvas id="studentChart"></canvas>
+              </div>
+            </div>
           </div>
-        </div>
-
-        <div className="stats-card">
-          <div className="flex items-center justify-between">
-            <div>
-              <h3 className="flex items-center mb-2">{t["jumlah-siswa"]}</h3>
-              <p className="animate-pulse">{stats.totalSiswa}</p>
-            </div>
-            <i className="material-icons">people_alt</i>
-          </div>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div className="bg-card p-6 rounded-lg shadow-md">
-          <h3 className="text-lg font-medium text-foreground mb-4 flex items-center">
-            <i className="material-icons mr-2 text-orange-400">bar_chart</i>
-            {t["statistik-pelanggaran"]}
-          </h3>
-          {isLoading ? (
-            <div className="flex justify-center items-center h-40">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
-            </div>
-          ) : (
-            <canvas id="violationChart"></canvas>
-          )}
-        </div>
-
-        <div className="bg-card p-6 rounded-lg shadow-md">
-          <h3 className="text-lg font-medium text-foreground mb-4 flex items-center">
-            <i className="material-icons mr-2 text-orange-400">pie_chart</i>
-            {t["jumlah-siswa-per-kelas"]}
-          </h3>
-          {isLoading ? (
-            <div className="flex justify-center items-center h-40">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
-            </div>
-          ) : (
-            <canvas id="studentChart"></canvas>
-          )}
-        </div>
-      </div>
+        </>
+      )}
     </div>
-  )
+  );
 }

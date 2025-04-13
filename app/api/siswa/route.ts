@@ -4,32 +4,24 @@ import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/firebase";
 import { ref, get } from "firebase/database";
 
-export async function GET(
-  request: Request,
-  { params }: { params: Promise<{ date: string }> }
-) {
+export async function GET(request: Request) {
   try {
     // Cek sesi autentikasi
     const session = await getServerSession(authOptions);
     if (!session) {
+      console.warn("Permintaan ke /api/siswa ditolak: Tidak ada sesi aktif");
       return NextResponse.json({ error: "Tidak diizinkan" }, { status: 401 });
     }
 
-    // Tunggu params untuk mendapatkan tanggal
-    const { date } = await params;
-
-    // Validasi parameter tanggal
-    if (!date) {
-      return NextResponse.json({ error: "Parameter tanggal diperlukan" }, { status: 400 });
-    }
-
-    // Ambil data dari Firebase
-    const pelanggaranRef = ref(db, `pelanggaran/${date}`);
-    const snapshot = await get(pelanggaranRef);
+    // Ambil data siswa dari Firebase
+    const siswaRef = ref(db, "siswa-i");
+    const snapshot = await get(siswaRef);
     const data = snapshot.val() || {};
-    const students = Object.values(data);
+    const siswa = Object.values(data);
 
-    return NextResponse.json(students, { status: 200 });
+    console.log(`Data siswa dari Firebase (siswa-i): ${JSON.stringify(siswa)}`);
+
+    return NextResponse.json(siswa, { status: 200 });
   } catch (error) {
     console.error("Error mengambil data siswa:", error);
     return NextResponse.json({ error: "Gagal memuat data siswa" }, { status: 500 });
