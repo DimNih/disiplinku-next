@@ -1,87 +1,95 @@
-"use client"
+"use client";
 
-import { useState, useEffect } from "react"
-import { translations } from "@/lib/translations"
-import { ImageIcon, Calendar, Info, User, Upload, RefreshCw } from "lucide-react"
-import { Button } from "@/components/ui/button"
+import { useState, useEffect } from "react";
+import { translations } from "@/lib/translations";
+import { ImageIcon, Calendar, Info, User, Upload, RefreshCw } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
 interface ImageData {
-  id: string
-  url: string
-  firebaseUrl?: string
-  originalFilename?: string
-  uploadedBy?: string
-  createdAt: number
-  scanned?: boolean
+  id: string;
+  url: string;
+  firebaseUrl?: string;
+  originalFilename?: string;
+  uploadedBy?: string;
+  createdAt: number;
+  scanned?: boolean;
+  fromCloudinary?: boolean;
 }
 
 interface ImagesSectionProps {
-  language: string
-  setImagePopupSrc: (src: string) => void
+  language: string;
+  setImagePopupSrc: (src: string) => void;
 }
 
 export default function ImagesSection({ language, setImagePopupSrc }: ImagesSectionProps) {
-  const [images, setImages] = useState<ImageData[]>([])
-  const [isLoading, setIsLoading] = useState(false)
-  const [isScanning, setIsScanning] = useState(false)
-  const [error, setError] = useState("")
-  const [uploadInfo, setUploadInfo] = useState({ visible: false })
-  const [scanResult, setScanResult] = useState<{ scanned: number; added: number } | null>(null)
+  const [images, setImages] = useState<ImageData[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [isScanning, setIsScanning] = useState(false);
+  const [error, setError] = useState("");
+  const [uploadInfo, setUploadInfo] = useState({ visible: false });
+  const [scanResult, setScanResult] = useState<{ scanned: number; added: number } | null>(null);
 
-  const t = translations[language as keyof typeof translations] || translations.id
+  const t = translations[language as keyof typeof translations] || translations.id;
 
   useEffect(() => {
-    loadImages()
-  }, [])
+    loadImages();
+  }, []);
 
   const loadImages = async () => {
-    setIsLoading(true)
-    setError("")
+    setIsLoading(true);
+    setError("");
 
     try {
-      const response = await fetch("/api/images")
-      if (!response.ok) throw new Error("Failed to fetch images")
+      const response = await fetch("/api/images", {
+        credentials: "include", // Include cookies for session authentication
+      });
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Failed to fetch images");
+      }
 
-      const data = await response.json()
-      setImages(data)
-    } catch (error) {
-      console.error("Error loading images:", error)
-      setError("Gagal memuat daftar gambar")
+      const data = await response.json();
+      setImages(data);
+    } catch (error: any) {
+      console.error("Error loading images:", error);
+      setError(error.message || "Gagal memuat daftar gambar");
     } finally {
-      setIsLoading(false)
+      setIsLoading(false);
     }
-  }
+  };
 
   const scanImages = async () => {
-    setIsScanning(true)
-    setScanResult(null)
+    setIsScanning(true);
+    setScanResult(null);
 
     try {
-      const response = await fetch("/api/scan-images")
-      if (!response.ok) throw new Error("Failed to scan images")
+      const response = await fetch("/api/scan-images", {
+        credentials: "include", // Include cookies for session authentication
+      });
+      if (!response.ok) throw new Error("Failed to scan images");
 
-      const data = await response.json()
+      const data = await response.json();
       if (data.success) {
         setScanResult({
           scanned: data.scanned,
           added: data.added,
-        })
+        });
         // Reload images to show newly scanned ones
-        loadImages()
+        loadImages();
       } else {
-        throw new Error(data.error || "Failed to scan images")
+        throw new Error(data.error || "Failed to scan images");
       }
     } catch (error) {
-      console.error("Error scanning images:", error)
-      setError("Gagal memindai gambar")
+      console.error("Error scanning images:", error);
+      setError("Gagal memindai gambar");
     } finally {
-      setIsScanning(false)
+      setIsScanning(false);
     }
-  }
+  };
 
   const toggleUploadInfo = () => {
-    setUploadInfo((prev) => ({ ...prev, visible: !prev.visible }))
-  }
+    setUploadInfo((prev) => ({ ...prev, visible: !prev.visible }));
+  };
 
   return (
     <div id="images" className="section">
@@ -205,10 +213,10 @@ export default function ImagesSection({ language, setImagePopupSrc }: ImagesSect
                       Admin ID: {image.uploadedBy}
                     </p>
                   )}
-                  {image.scanned && (
+                  {image.fromCloudinary && (
                     <p className="text-xs text-blue-500 mt-1">
-                      <i className="material-icons text-xs mr-1 align-text-bottom">search</i>
-                      Found by folder scan
+                      <i className="material-icons text-xs mr-1 align-text-bottom">cloud</i>
+                      From Cloudinary
                     </p>
                   )}
                 </div>
@@ -223,5 +231,5 @@ export default function ImagesSection({ language, setImagePopupSrc }: ImagesSect
         </div>
       )}
     </div>
-  )
+  );
 }
