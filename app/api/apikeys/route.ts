@@ -12,7 +12,7 @@ export async function GET() {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const userId = session.user.id
+    const userId = session.user
 
     // Only fetch API keys for the current user
     const apiKeysRef = ref(db, `admin-dashboard/admin/${userId}/apikeys`)
