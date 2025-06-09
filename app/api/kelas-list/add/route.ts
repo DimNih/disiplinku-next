@@ -21,13 +21,11 @@ export async function POST(request: Request) {
     const classPath = `${grade}/${major}/${className}`
     const kelasRef = ref(db, `kelas-list/grades/${classPath}`)
 
-    // Check if class already exists
     const snapshot = await get(kelasRef)
     if (snapshot.exists()) {
       return NextResponse.json({ error: "Kelas sudah ada" }, { status: 400 })
     }
 
-    // Add new class
     await set(kelasRef, { createdAt: Date.now() })
 
     return NextResponse.json({ success: true })

@@ -95,10 +95,8 @@ export default function HomeSection({ language }: HomeProps) {
       const pelanggaranList = await pelanggaranResponse.json();
       console.log(`Pelanggaran dari /api/students/${date}: ${JSON.stringify(pelanggaranList)}`);
 
-      // Hitung total pelanggar
       const totalPelanggar = pelanggaranList.length;
 
-      // Hitung pelanggaran per jenis
       const violationsByType: Record<string, number> = {};
       pelanggaranList.forEach((p: any) => {
         const jenis = p.jenisPelanggaran || t["unknown-violation"];

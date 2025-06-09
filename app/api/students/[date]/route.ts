@@ -6,24 +6,20 @@ import { ref, get } from "firebase/database";
 
 export async function GET(
   request: Request,
-  { params }: { params: Promise<{ date: string }> }
+  { params }: { params: Promise<{ date: string, nama: string }> }
 ) {
   try {
-    // Cek sesi autentikasi
     const session = await getServerSession(authOptions);
     if (!session) {
       return NextResponse.json({ error: "Tidak diizinkan" }, { status: 401 });
     }
 
-    // Tunggu params untuk mendapatkan tanggal
     const { date } = await params;
 
-    // Validasi parameter tanggal
     if (!date) {
       return NextResponse.json({ error: "Parameter tanggal diperlukan" }, { status: 400 });
     }
 
-    // Ambil data dari Firebase
     const pelanggaranRef = ref(db, `pelanggaran/${date}`);
     const snapshot = await get(pelanggaranRef);
     const data = snapshot.val() || {};
@@ -35,3 +31,6 @@ export async function GET(
     return NextResponse.json({ error: "Gagal memuat data siswa" }, { status: 500 });
   }
 }
+
+
+

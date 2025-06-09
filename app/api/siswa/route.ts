@@ -13,7 +13,6 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: "Tidak diizinkan" }, { status: 401 });
     }
 
-    // Ambil data siswa dari Firebase
     const siswaRef = ref(db, "siswa-i");
     const snapshot = await get(siswaRef);
     const data = snapshot.val() || {};

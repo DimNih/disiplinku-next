@@ -46,7 +46,6 @@ export default function Dashboard({ user }: { user: User }) {
     const savedLang = localStorage.getItem("language") || "id";
     setLanguage(savedLang);
 
-    // Check if mobile
     const checkIfMobile = () => {
       setIsMobile(window.innerWidth <= 768);
       if (window.innerWidth <= 768) {
@@ -54,13 +53,10 @@ export default function Dashboard({ user }: { user: User }) {
       }
     };
 
-    // Initial check
     checkIfMobile();
 
-    // Add resize listener
     window.addEventListener("resize", checkIfMobile);
 
-    // Simulate loading
     const timer = setTimeout(() => {
       setIsLoading(false);
       showToast(
