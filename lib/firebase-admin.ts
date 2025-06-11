@@ -1,8 +1,10 @@
 import admin from "firebase-admin";
 
-const serviceAccount = process.env.SERVICE_ACCOUNT
-  ? JSON.parse(process.env.SERVICE_ACCOUNT)
-  : require("../service-account.json");
+if (!process.env.SERVICE_ACCOUNT) {
+  throw new Error("Missing SERVICE_ACCOUNT environment variable");
+}
+
+const serviceAccount = JSON.parse(process.env.SERVICE_ACCOUNT);
 
 if (!admin.apps.length) {
   admin.initializeApp({
