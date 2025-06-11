@@ -4,8 +4,9 @@ import { useState, useEffect } from "react"
 import { translations } from "@/lib/translations"
 import { DataTable } from "@/components/ui/data-table"
 import { Button } from "@/components/ui/button"
-import { Key, Calendar, CheckCircle, Eye, EyeOff, Copy, AlertCircle } from "lucide-react"
+import { Key, Calendar, CheckCircle, Eye, EyeOff, Copy, AlertCircle, Trash2 } from "lucide-react"
 import { useToast } from "@/contexts/toast-context"
+import { Switch } from "@/components/ui/switch"
 
 interface ApiKeySectionProps {
   language: string
@@ -32,7 +33,10 @@ export default function ApiKeySection({ language }: ApiKeySectionProps) {
 
     try {
       const response = await fetch("/api/apikeys")
-      if (!response.ok) throw new Error("Failed to fetch API keys")
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || "Failed to fetch API keys")
+      }
 
       const data = await response.json()
       if (data.success) {
@@ -59,12 +63,16 @@ export default function ApiKeySection({ language }: ApiKeySectionProps) {
         headers: { "Content-Type": "application/json" },
       })
 
-      if (!response.ok) throw new Error("Failed to generate API key")
+      console.log("Generate API key response:", response.status, response.statusText)
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || "Failed to generate API key")
+      }
 
       const data = await response.json()
       if (data.success) {
         setNewApiKey(data.apikey)
-        loadApiKeys() // Refresh the list
+        loadApiKeys()
         showToast(t["success"], t["api-key-generated"], "success")
       } else {
         throw new Error(data.error || "Failed to generate API key")
@@ -78,6 +86,72 @@ export default function ApiKeySection({ language }: ApiKeySectionProps) {
     }
   }
 
+  const updateApiKeyStatus = async (keyId: string, active: boolean) => {
+    setIsLoading(true)
+    setError("")
+
+    try {
+      const response = await fetch("/api/apikeys/update-apikey-status", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ keyId, active }),
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || "Failed to update API key status")
+      }
+
+      const data = await response.json()
+      if (data.success) {
+        loadApiKeys()
+        showToast(t["success"], t["api-key-status-updated"], "success")
+      } else {
+        throw new Error(data.error || "Failed to update API key status")
+      }
+    } catch (error) {
+      console.error("Error updating API key status:", error)
+      setError("Gagal memperbarui status API key")
+      showToast(t["error"], t["api-key-status-update-failed"], "error")
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const deleteApiKey = async (keyId: string) => {
+    if (!confirm(t["confirm-delete-api-key"])) return
+
+    setIsLoading(true)
+    setError("")
+
+    try {
+      const response = await fetch("/api/apikeys/delete-apikey", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ keyId }),
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || "Failed to delete API key")
+      }
+
+      const data = await response.json()
+      if (data.success) {
+        loadApiKeys()
+        showToast(t["success"], t["api-key-deleted"], "success")
+      } else {
+        throw new Error(data.error || "Failed to delete API key")
+      }
+    } catch (error) {
+      console.error("Error deleting API key:", error)
+      setError("Gagal menghapus API key")
+      showToast(t["error"], t["api-key-delete-failed"], "error")
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
   const toggleKeyVisibility = (keyId: string) => {
     setVisibleKeys((prev) => ({
       ...prev,
@@ -86,14 +160,37 @@ export default function ApiKeySection({ language }: ApiKeySectionProps) {
   }
 
   const copyToClipboard = (key: string, keyId: string) => {
-    navigator.clipboard.writeText(key)
-    setCopiedKey(keyId)
-    showToast(t["success"], t["api-key-copied"], "success")
-
-    // Reset copied status after 2 seconds
-    setTimeout(() => {
-      setCopiedKey(null)
-    }, 2000)
+    if (typeof navigator !== "undefined" && navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(key)
+        .then(() => {
+          setCopiedKey(keyId)
+          showToast(t["success"], t["api-key-copied"], "success")
+          setTimeout(() => {
+            setCopiedKey(null)
+          }, 2000)
+        })
+        .catch((err) => {
+          console.error("Failed to copy text:", err)
+          showToast(t["error"], t["copy-failed"], "error")
+        })
+    } else {
+      try {
+        const textarea = document.createElement("textarea")
+        textarea.value = key
+        document.body.appendChild(textarea)
+        textarea.select()
+        document.execCommand("copy")
+        document.body.removeChild(textarea)
+        setCopiedKey(keyId)
+        showToast(t["success"], t["api-key-copied"], "success")
+        setTimeout(() => {
+          setCopiedKey(null)
+        }, 2000)
+      } catch (err) {
+        console.error("Fallback copy failed:", err)
+        showToast(t["error"], t["copy-failed"], "error")
+      }
+    }
   }
 
   const columns = [
@@ -154,11 +251,32 @@ export default function ApiKeySection({ language }: ApiKeySectionProps) {
     {
       key: "status",
       header: t["status"],
-      cell: () => (
-        <span className="text-green-500 flex items-center">
-          <CheckCircle className="h-4 w-4 mr-1" />
-          {t["active"]}
-        </span>
+      cell: (keyData: any) => (
+        <div className="flex items-center gap-2">
+          <Switch
+            checked={keyData.active}
+            onCheckedChange={() => updateApiKeyStatus(keyData.id, !keyData.active)}
+            disabled={isLoading}
+          />
+          <span className={keyData.active ? "text-green-500" : "text-red-500"}>
+            {keyData.active ? t["active"] : t["inactive"]}
+          </span>
+        </div>
+      ),
+    },
+    {
+      key: "actions",
+      header: t["actions"],
+      cell: (keyData: any) => (
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => deleteApiKey(keyData.id)}
+          className="h-7 w-7 p-0 text-red-500"
+          title={t["delete-key"]}
+        >
+          <Trash2 className="h-4 w-4" />
+        </Button>
       ),
     },
   ]
@@ -183,7 +301,7 @@ export default function ApiKeySection({ language }: ApiKeySectionProps) {
         </div>
 
         {newApiKey && (
-          <div className="mt-4 p-4 border rounded-lg bg-muted">
+          <div className="mt-4 p-4 border rounded-md bg-muted">
             <div className="flex flex-col gap-2">
               <div className="flex items-center justify-between flex-wrap gap-2">
                 <span className="font-medium">{t["api-key"]}:</span>
@@ -191,8 +309,29 @@ export default function ApiKeySection({ language }: ApiKeySectionProps) {
                   variant="outline"
                   size="sm"
                   onClick={() => {
-                    navigator.clipboard.writeText(newApiKey)
-                    showToast(t["success"], t["api-key-copied"], "success")
+                    if (typeof navigator !== "undefined" && navigator.clipboard && navigator.clipboard.writeText) {
+                      navigator.clipboard.writeText(newApiKey)
+                        .then(() => {
+                          showToast(t["success"], t["api-key-copied"], "success")
+                        })
+                        .catch((err) => {
+                          console.error("Failed to copy text:", err)
+                          showToast(t["error"], t["copy-failed"], "error")
+                        })
+                    } else {
+                      try {
+                        const textarea = document.createElement("textarea")
+                        textarea.value = newApiKey
+                        document.body.appendChild(textarea)
+                        textarea.select()
+                        document.execCommand("copy")
+                        document.body.removeChild(textarea)
+                        showToast(t["success"], t["api-key-copied"], "success")
+                      } catch (err) {
+                        console.error("Fallback copy failed:", err)
+                        showToast(t["error"], t["copy-failed"])
+                      }
+                    }
                   }}
                   className="flex items-center gap-1"
                 >
@@ -200,9 +339,9 @@ export default function ApiKeySection({ language }: ApiKeySectionProps) {
                   {t["copy"]}
                 </Button>
               </div>
-              <code className="p-2 bg-background rounded font-mono text-sm break-all">{newApiKey}</code>
-              <p className="text-red-500 text-sm flex items-center mt-2">
-                <AlertCircle className="h-4 w-4 mr-2 flex-shrink-0" />
+              <code className="p-2 bg-background rounded-lg font-mono text-sm break-all">{newApiKey}</code>
+              <p className="text-red-400 text-sm flex items-center mt-2">
+                <AlertCircle className="h-4 w-4 mr-2 flex-0" />
                 {t["api-key-warning"]}
               </p>
             </div>
