@@ -1,0 +1,12 @@
+{
+  "crons": [
+    {
+      "path": "/api/notification-send",
+      "schedule": "*/30 * * * * *",
+      "method": "POST",
+      "body": {
+        "type": "general"
+      }
+    }
+  ]
+}
