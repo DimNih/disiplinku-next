@@ -2,7 +2,7 @@
   "crons": [
     {
       "path": "/api/notification-send",
-      "schedule": "*/30 * * * * *",
+      "schedule": "* * * * *",
       "method": "POST",
       "body": {
         "type": "general"
