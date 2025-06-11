@@ -9,11 +9,11 @@ export async function POST() {
   try {
     const session = await getServerSession(authOptions)
 
-    if (!session) {
+    if (!session || !session.user || !session.user.email) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const userId = session.user.id
+    const userId = session.user.email
 
     // Generate a unique API key that includes the user ID
     const randomBytes = crypto.randomBytes(12).toString("hex")
