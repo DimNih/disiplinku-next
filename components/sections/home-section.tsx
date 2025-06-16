@@ -58,7 +58,7 @@ export default function HomeSection({ language }: HomeProps) {
   const loadDashboard = async () => {
     setIsLoading(true);
     try {
-      // Ambil data OSIS (diasumsikan dari /api/osis)
+      // Fetch OSIS data
       let osisOnlineCount = 0;
       try {
         const osisResponse = await fetch("/api/osis", { credentials: "include" });
@@ -67,38 +67,44 @@ export default function HomeSection({ language }: HomeProps) {
           osisOnlineCount = osisData.filter((user: any) => user.isOnline).length;
           console.log(`OSIS Online: ${osisOnlineCount}`);
         } else {
-          console.warn("Gagal mengambil data OSIS: ", osisResponse.status);
+          console.warn("Failed to fetch OSIS data: ", osisResponse.status);
         }
       } catch (err) {
-        console.warn("Endpoint /api/osis tidak tersedia, menggunakan default 0");
+        console.warn("Endpoint /api/osis not available, using default 0");
       }
 
-      // Ambil daftar tanggal dari /api/dates
+      // Fetch all dates from /api/dates
       const datesResponse = await fetch("/api/dates", { credentials: "include" });
       if (!datesResponse.ok) {
-        throw new Error(t["error-mengambil-tanggal"] || "Gagal mengambil tanggal");
+        throw new Error(t["error-mengambil-tanggal"] || "Failed to fetch dates");
       }
       const dates = await datesResponse.json();
-      console.log(`Tanggal dari /api/dates: ${JSON.stringify(dates)}`);
+      console.log(`Dates from /api/dates: ${JSON.stringify(dates)}`);
 
-      // Gunakan tanggal terbaru atau default
-      const date = dates[0]?.date || "2025-04-09";
-
-      // Ambil data pelanggaran dari /api/students/[date]
-      const pelanggaranResponse = await fetch(`/api/students/${date}`, {
-        credentials: "include",
-      });
-      if (!pelanggaranResponse.ok) {
-        const errorData = await pelanggaranResponse.json();
-        throw new Error(errorData.error || t["error-mengambil-siswa"] || "Gagal mengambil data pelanggaran");
+      // Fetch violation data for all dates
+      let allPelanggaran: any[] = [];
+      for (const date of dates) {
+        try {
+          const pelanggaranResponse = await fetch(`/api/students/${date}`, {
+            credentials: "include",
+          });
+          if (pelanggaranResponse.ok) {
+            const pelanggaranList = await pelanggaranResponse.json();
+            console.log(`Violations for ${date}: ${JSON.stringify(pelanggaranList)}`);
+            allPelanggaran = [...allPelanggaran, ...pelanggaranList];
+          } else {
+            console.warn(`Failed to fetch violations for ${date}: ${pelanggaranResponse.status}`);
+          }
+        } catch (err) {
+          console.warn(`Error fetching violations for ${date}:`, err);
+        }
       }
-      const pelanggaranList = await pelanggaranResponse.json();
-      console.log(`Pelanggaran dari /api/students/${date}: ${JSON.stringify(pelanggaranList)}`);
 
-      const totalPelanggar = pelanggaranList.length;
+      const totalPelanggar = allPelanggaran.length;
 
+      // Aggregate violations by type
       const violationsByType: Record<string, number> = {};
-      pelanggaranList.forEach((p: any) => {
+      allPelanggaran.forEach((p: any) => {
         const jenis = p.jenisPelanggaran || t["unknown-violation"];
         violationsByType[jenis] = (violationsByType[jenis] || 0) + 1;
       });
@@ -108,16 +114,16 @@ export default function HomeSection({ language }: HomeProps) {
         data: Object.values(violationsByType),
       });
 
-      // Ambil data siswa dari /api/siswa
+      // Fetch student data from /api/siswa
       const siswaResponse = await fetch("/api/siswa", { credentials: "include" });
       if (!siswaResponse.ok) {
         const errorData = await siswaResponse.json();
-        throw new Error(errorData.error || t["error-mengambil-siswa"] || "Gagal mengambil data siswa");
+        throw new Error(errorData.error || t["error-mengambil-siswa"] || "Failed to fetch student data");
       }
       const siswaList = await siswaResponse.json();
-      console.log(`Siswa dari /api/siswa: ${JSON.stringify(siswaList)}`);
+      console.log(`Students from /api/siswa: ${JSON.stringify(siswaList)}`);
 
-      // Hitung siswa per kelas
+      // Count students per class
       const classCounts: Record<string, number> = {};
       siswaList.forEach((s: any) => {
         const kelas = s.kelas || t["unknown-class"];
@@ -136,14 +142,14 @@ export default function HomeSection({ language }: HomeProps) {
       });
 
       if (siswaList.length === 0) {
-        showToast(t["info"], t["tidak-ada-siswa"] || "Tidak ada data siswa ditemukan", "info");
+        showToast(t["info"], t["tidak-ada-siswa"] || "No student data found", "info");
       }
-      if (pelanggaranList.length === 0) {
-        showToast(t["info"], t["tidak-ada-pelanggaran"] || "Tidak ada data pelanggaran untuk tanggal ini", "info");
+      if (allPelanggaran.length === 0) {
+        showToast(t["info"], t["tidak-ada-pelanggaran"] || "No violation data found", "info");
       }
     } catch (error: any) {
-      console.error("Error memuat dashboard:", error);
-      showToast(t["error"], error.message || t["error-mengambil-data"] || "Gagal memuat data dashboard", "error");
+      console.error("Error loading dashboard:", error);
+      showToast(t["error"], error.message || t["error-mengambil-data"] || "Failed to load dashboard data", "error");
     } finally {
       setIsLoading(false);
     }
@@ -152,7 +158,7 @@ export default function HomeSection({ language }: HomeProps) {
   const initCharts = () => {
     // Violation chart
     const violationCtx = document.getElementById("violationChart") as HTMLCanvasElement;
-    if (violationCtx) {
+    if (violationCtx && violationData.labels.length > 0) {
       if (violationChartRef.current) {
         violationChartRef.current.destroy();
       }
@@ -163,7 +169,7 @@ export default function HomeSection({ language }: HomeProps) {
           labels: violationData.labels,
           datasets: [
             {
-              label: t["jumlah-pelanggaran"] || "Jumlah Pelanggaran",
+              label: t["jumlah-pelanggaran"] || "Number of Violations",
               data: violationData.data,
               backgroundColor: "rgba(37, 99, 235, 0.6)",
               borderColor: "rgba(37, 99, 235, 1)",
@@ -181,7 +187,7 @@ export default function HomeSection({ language }: HomeProps) {
 
     // Student chart
     const studentCtx = document.getElementById("studentChart") as HTMLCanvasElement;
-    if (studentCtx) {
+    if (studentCtx && classData.labels.length > 0) {
       if (studentChartRef.current) {
         studentChartRef.current.destroy();
       }
@@ -214,7 +220,7 @@ export default function HomeSection({ language }: HomeProps) {
           labels: classData.labels,
           datasets: [
             {
-              label: t["jumlah-siswa"] || "Jumlah Siswa",
+              label: t["jumlah-siswa"] || "Number of Students",
               data: classData.data,
               backgroundColor: backgroundColors,
               borderColor: borderColors,
@@ -281,8 +287,12 @@ export default function HomeSection({ language }: HomeProps) {
                 <i className="material-icons mr-2 text-orange-400">bar_chart</i>
                 {t["statistik-pelanggaran"]}
               </h3>
-              <div className="h-64">
-                <canvas id="violationChart"></canvas>
+              <div className="h-64 flex items-center justify-center">
+                {violationData.labels.length > 0 ? (
+                  <canvas id="violationChart"></canvas>
+                ) : (
+                  <p className="text-foreground text-center">{t["tidak-ada-data"] || "No data available"}</p>
+                )}
               </div>
             </div>
 
@@ -291,8 +301,12 @@ export default function HomeSection({ language }: HomeProps) {
                 <i className="material-icons mr-2 text-orange-400">pie_chart</i>
                 {t["jumlah-siswa-per-kelas"]}
               </h3>
-              <div className="h-64">
-                <canvas id="studentChart"></canvas>
+              <div className="h-64 flex items-center justify-center">
+                {classData.labels.length > 0 ? (
+                  <canvas id="studentChart"></canvas>
+                ) : (
+                  <p className="text-foreground text-center">{t["tidak-ada-data"] || "No data available"}</p>
+                )}
               </div>
             </div>
           </div>
