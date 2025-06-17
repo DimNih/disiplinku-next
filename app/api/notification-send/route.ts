@@ -122,8 +122,11 @@ async function sendGeneralNotification() {
       const name = notificationData.name || "Unknown";
       const date = notificationData.date || "No date";
       const imageUrl = notificationData.imageUrl || "";
+      const content = notificationData.content || "";
       const title = `Post Baru dari ${name}`;
-      const body = `Diposting pada ${date}`;
+      // Truncate content to 100 chars to fit OneSignal limits
+      const truncatedContent = content.length > 100 ? `${content.substring(0, 97)}...` : content;
+      const body = content ? `${truncatedContent} (Diposting pada ${date})` : `Diposting pada ${date}`;
 
       console.log("Data baru di /notifications:", notificationData);
 
@@ -135,6 +138,13 @@ async function sendGeneralNotification() {
               included_segments: ["All"],
               contents: { en: body },
               headings: { en: title },
+              data: {
+                notificationId: notificationKey,
+                name: name,
+                date: date,
+                imageUrl: imageUrl,
+                content: content, // Full content in data
+              },
               ios_sound: "default",
               android_sound: "default",
             };
