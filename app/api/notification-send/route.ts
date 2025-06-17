@@ -26,7 +26,7 @@ async function sendCallNotification() {
 
         if (!callData || callData.processed) return;
 
-        const { callerId, callerName, callType, callID } = callData;
+        const { callerId, callerName, callType, callId } = callData;
         promises.push(
           (async () => {
             try {
@@ -42,25 +42,24 @@ async function sendCallNotification() {
 
               const playerId = recipientData.oneSignalPlayerId;
 
-              console.log(`Fetching caller name for callerId: ${callerId}`);
+              console.log(`Fetching caller name for ${callerId}`);
               const callerSnapshot = await db.ref(`user-name-admin/${callerId}`).once("value");
               const callerData = callerSnapshot.val();
-              console.log(`Caller data for ${callerId}:`, callerData);
+              console.log(`Caller data ${callerId}:`, callerData);
 
-              const effectiveCallerName = callerData?.name && callerData.name.trim() !== ""
-                ? callerData.name
-                : (callerName && callerName.trim() !== "" ? callerName : "User");
+              const effectiveCallerName = callerData?.name?.trim() || 
+                (callerName?.trim() || "User");
 
-              console.log(`Sending notification to playerId: ${playerId} with callerName: ${effectiveCallerName}`);
+              console.log(`Sending notification to ${playerId} with callerName: ${effectiveCallerName}`);
 
               const message = {
                 app_id: oneSignalAppId,
                 include_player_ids: [playerId],
-                contents: { en: `Panggilan ${callType} Dari ${effectiveCallerName}` },
+                contents: { en: `Panggilan ${callType} dari ${effectiveCallerName}` },
                 headings: { en: "Panggilan Masuk" },
                 data: {
-                  callType: callType || "voice",
-                  callId: callID,
+                  callType: callType || "general",
+                  callId: callId,
                   callerName: effectiveCallerName,
                   recipientId: recipientId,
                 },
@@ -69,8 +68,8 @@ async function sendCallNotification() {
                 priority: 10,
                 android_vibrate: true,
                 vibration_pattern: [0, 1000, 500, 1000],
-                ios_badgeType: "Increase",
-                ios_badgeCount: 1,
+                ios_badge: "Increment",
+                ios_badge_count: 1,
               };
 
               const response = await axios.post(
@@ -97,8 +96,8 @@ async function sendCallNotification() {
     await Promise.all(promises);
     return { success: true, message: "Processed incoming calls" };
   } catch (error) {
-    console.error("Failed to process call notifications:", error);
-    return { success: false, error: "Gagal memproses notifikasi panggilan" };
+    console.error("Gagal memproses notifikasi panggilan:", error);
+    return { success: false, message: "Gagal memproses notifikasi panggilan" };
   }
 }
 
@@ -108,8 +107,8 @@ async function sendGeneralNotification() {
     const snapshot = await notificationsRef.once("value");
 
     if (!snapshot.exists()) {
-      console.log("No notifications to process");
-      return { success: true, message: "No notifications to process" };
+      console.log("Tidak ada notifikasi untuk diproses");
+      return { success: true, message: "Tidak ada notifikasi untuk diproses" };
     }
 
     const promises = [];
@@ -120,82 +119,102 @@ async function sendGeneralNotification() {
       if (notificationData.sent) return;
 
       const name = notificationData.name || "Unknown";
-      const date = notificationData.date || "No date";
+      const date = notificationData.date || "Tanpa tanggal";
       const imageUrl = notificationData.imageUrl || "";
       const content = notificationData.content || "";
-      const title = `Post Baru dari ${name}`;
+      const titleEn = `New Post from ${name}!`;
+      const titleId = `Post Baru dari ${name}!`;
       // Truncate content to 100 chars to fit OneSignal limits
-      const truncatedContent = content.length > 100 ? `${content.substring(0, 97)}...` : content;
-      const body = content ? `${truncatedContent}`
+      const truncatedContent = content.trim().length > 100 ? `${content.substring(0, 97)}...` : content;
+      const bodyEn = content ? `${truncatedContent} (${date})` : `${date}`;
+      const bodyId = content ? `${truncatedContent} (${date})` : `${date}`;
 
-      console.log("Data baru di /notifications:", notificationData);
+      console.log(`Mengirim notifikasi:`, { notificationData});
 
       promises.push(
-        (async () => {
+        async () => {
           try {
             const message = {
               app_id: oneSignalAppId,
               included_segments: ["All"],
-              contents: { en: body },
-              headings: { en: title },
+              contents: { en: bodyEn, id: bodyId },
+              headings: { en: titleEn, id: titleId },
               data: {
                 notificationId: notificationKey,
+                postId: notificationData.id,
                 name: name,
                 date: date,
                 imageUrl: imageUrl,
-                content: content, // Full content in data
+                content: content,
               },
-              ios_sound: "default",
-              android_sound: "default",
+              ios_sound: "notification.wav",
+              android_sound: "notification",
+              priority: 10,
+              android_vibrate: true,
+              vibration_pattern: [0, 500, 100, 500],
+              ios_badge: "Increment",
+              ios_badge_count: 1,
+              buttons: [
+                {
+                  id: "view-post",
+                  text: { en: "View Post", id: "Lihat Post" },
+                  icon: "ic_stat_notification",
+                },
+                {
+                  id: "share-post",
+                  text: { en: "Share", id: "Bagikan" },
+                  icon: "ic_stat_share",
+                },
+              ],
+              small_icon: "ic_stat_notification",
+              large_icon: imageUrl || "ic_large_icon",
             };
 
             if (imageUrl) {
               message.big_picture = imageUrl;
-              message.ios_attachments = { image: imageUrl };
+              message.attachments = { ios_image: imageUrl };
             }
 
             const response = await axios.post(
-              "https://onesignal.com/api/v1/notifications",
+              "https://onesignal.com/api/notifications",
               message,
               {
                 headers: {
-                  Authorization: `Basic ${oneSignalApiKey}`,
+                  Authorization: `Basic ${oneSignalAppId}`,
                   "Content-Type": "application/json",
                 },
               }
             );
 
-            console.log("Notifikasi dikirim:", response.data);
+            console.log(`Notifikasi dikirim untuk ${notificationKey}:`, response.data);
             await notificationsRef.child(notificationKey).update({ sent: true });
           } catch (error) {
-            console.error("Gagal mengirim notifikasi:", error);
+            console.error(`Gagal mengirim notifikasi untuk ${notificationKey}:`, error);
           }
-        })()
+        }
       );
     });
 
     await Promise.all(promises);
-    return { success: true, message: "Processed notifications" };
+    return { success: true, message: "Notifikasi berhasil diproses" };
   } catch (error) {
-    console.error("Failed to process general notifications:", error);
-    return { success: false, error: "Gagal memproses notifikasi umum" };
+    console.error("Gagal memproses notifikasi umum:", error);
+    return { success: false, message: "Gagal memproses notifikasi umum" };
   }
 }
 
-export async function POST(request: Request) {
+export default async function handler(req: NextRequest, res: NextResponse) {
   try {
-    // Cek session (opsional, uncomment kalau perlu auth)
-    // const session = await getServerSession(authOptions);
-    // if (!session || !session.user) {
-    //   return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    // }
-
     if (!process.env.SERVICE_ACCOUNT) {
-      console.error("Missing Firebase service account");
-      return NextResponse.json({ error: "Firebase configuration missing" }, { status: 500 });
+      console.error("Konfigurasi Firebase tidak ditemukan");
+      return res.status(500).json({ message: "Konfigurasi Firebase tidak ditemukan" });
     }
 
-    const { type } = await request.json(); // Ambil type dari body (call atau general)
+    if (req.method !== "POST") {
+      return res.status(405).json({ message: "Metode tidak diizinkan" });
+    }
+
+    const { type } = await req.json();
 
     let result;
     if (type === "call") {
@@ -203,7 +222,6 @@ export async function POST(request: Request) {
     } else if (type === "general") {
       result = await sendGeneralNotification();
     } else {
-      // Jalankan keduanya kalau type ga dispecify
       const callResult = await sendCallNotification();
       const generalResult = await sendGeneralNotification();
       result = {
@@ -212,13 +230,13 @@ export async function POST(request: Request) {
           call: callResult.message,
           general: generalResult.message,
         },
-        error: callResult.error || generalResult.error,
+        error: callResult.message || generalResult.message,
       };
     }
 
-    return NextResponse.json(result, { status: result.success ? 200 : 500 });
+    return res.status(result.success ? 200 : 500).json(result);
   } catch (error) {
-    console.error("Error processing notifications:", error);
-    return NextResponse.json({ error: "Gagal memproses notifikasi" }, { status: 500 });
+    console.error("Gagal memproses notifikasi:", error);
+    return res.status(500).json({ message: "Gagal memproses notifikasi" });
   }
 }
