@@ -126,7 +126,7 @@ async function sendGeneralNotification() {
       const title = `Post Baru dari ${name}`;
       // Truncate content to 100 chars to fit OneSignal limits
       const truncatedContent = content.length > 100 ? `${content.substring(0, 97)}...` : content;
-      const body = content ? `${truncatedContent} ,${date}` : `${date}`;
+      const body = content ? `${truncatedContent}`
 
       console.log("Data baru di /notifications:", notificationData);
 
