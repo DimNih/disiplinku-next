@@ -197,7 +197,7 @@ async function sendGeneralNotification() {
           const kelas = violationData.kelas || "Tidak diketahui";
           const nis = violationData.nis || "Tidak diketahui";
           const title = `Pelanggaran ${jenisPelanggaran} oleh ${nama}`;
-          const content = `Nama: ${nama}\nKelas: ${kelas}`;
+          const content = `Nama: ${nama}dan Kelas: ${kelas} \n ${tanggalPelanggaran}`;
           const truncatedContent = content.length > 100 ? `${content.substring(0, 97)}...` : content;
           const body = `${truncatedContent}`;
 
