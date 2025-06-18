@@ -199,7 +199,7 @@ async function sendGeneralNotification() {
           const title = `Pelanggaran ${jenisPelanggaran} oleh ${nama}`;
           const content = `Nama: ${nama}\nKelas: ${kelas}`;
           const truncatedContent = content.length > 100 ? `${content.substring(0, 97)}...` : content;
-          const body = `${truncatedContent}\n${tanggalPelanggaran}`;
+          const body = `${truncatedContent}`;
 
           console.log(`Data baru di /pelanggaran/${date}/${violationKey}:`, violationData);
 
