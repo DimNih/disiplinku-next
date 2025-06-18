@@ -104,82 +104,165 @@ async function sendCallNotification() {
 
 async function sendGeneralNotification() {
   try {
-    const notificationsRef = db.ref("/notifications");
-    const snapshot = await notificationsRef.once("value");
+    const promises = [];
 
-    if (!snapshot.exists()) {
-      console.log("No notifications to process");
-      return { success: true, message: "No notifications to process" };
+    // Process general notifications from /notifications
+    const notificationsRef = db.ref("/notifications");
+    const notificationSnapshot = await notificationsRef.once("value");
+
+    if (notificationSnapshot.exists()) {
+      notificationSnapshot.forEach((notificationSnapshot) => {
+        const notificationData = notificationSnapshot.val();
+        const notificationKey = notificationSnapshot.key;
+
+        if (notificationData.sent) return;
+
+        const name = notificationData.name || "Unknown";
+        const date = notificationData.date || "No date";
+        const imageUrl = notificationData.imageUrl || "";
+        const content = notificationData.content || "";
+        const title = `Post Baru dari ${name}`;
+        // Truncate content to 100 chars for notification body
+        const truncatedContent = content.length > 100 ? `${content.substring(0, 97)}...` : content;
+        // Construct body with content and date
+        const body = `${truncatedContent}\n${date}`;
+
+        console.log("Data baru di /notifications:", notificationData);
+
+        promises.push(
+          (async () => {
+            try {
+              const message = {
+                app_id: oneSignalAppId,
+                included_segments: ["All"],
+                contents: { en: body },
+                headings: { en: title },
+                data: {
+                  notificationId: notificationKey,
+                  name: name,
+                  date: date,
+                  imageUrl: imageUrl,
+                  content: content,
+                },
+                ios_sound: "default",
+                android_sound: "default",
+              };
+
+              if (imageUrl) {
+                message.big_picture = imageUrl;
+                message.ios_attachments = { image: imageUrl };
+              }
+
+              const response = await axios.post(
+                "https://onesignal.com/api/v1/notifications",
+                message,
+                {
+                  headers: {
+                    Authorization: `Basic ${oneSignalApiKey}`,
+                    "Content-Type": "application/json",
+                  },
+                }
+              );
+
+              console.log("Notifikasi umum dikirim:", response.data);
+              await notificationsRef.child(notificationKey).update({ sent: true });
+            } catch (error) {
+              console.error("Gagal mengirim notifikasi umum:", error);
+            }
+          })()
+        );
+      });
+    } else {
+      console.log("No general notifications to process");
     }
 
-    const promises = [];
-    snapshot.forEach((notificationSnapshot) => {
-      const notificationData = notificationSnapshot.val();
-      const notificationKey = notificationSnapshot.key;
+    // Process violation notifications from /violations
+    const violationsRef = db.ref("/violations");
+    const violationSnapshot = await violationsRef.once("value");
 
-      if (notificationData.sent) return;
+    if (violationSnapshot.exists()) {
+      violationSnapshot.forEach((violationSnapshot) => {
+        const violationData = violationSnapshot.val();
+        const violationKey = violationSnapshot.key;
 
-      const name = notificationData.name || "Unknown";
-      const date = notificationData.date || "No date";
-      const imageUrl = notificationData.imageUrl || "";
-      const content = notificationData.content || "";
-      const title = `Post Baru dari ${name}`;
-      // Truncate content to 100 chars for notification body
-      const truncatedContent = content.length > 100 ? `${content.substring(0, 97)}...` : content;
-      // Construct body with content and date
-      const body = `${truncatedContent}\n\n${date}`;
+        if (violationData.sent) return;
 
-      console.log("Data baru di /notifications:", notificationData);
+        const nama = violationData.nama || "Unknown";
+        const jenisPelanggaran = violationData.jenisPelanggaran || "Tidak diketahui";
+        const tanggalPelanggaran = violationData.tanggalPelanggaran || "No date";
+        const fotoUrl = violationData.fotoUrl || "";
+        const kelas = violationData.kelas || "Tidak diketahui";
+        const nis = violationData.nis || "Tidak diketahui";
+        const title = `Pelanggaran Baru oleh ${nama}`;
+        // Construct content with violation details
+        const content = `Pelanggaran: ${jenisPelanggaran}\nNama: ${nama}\nKelas: ${kelas}\nNIS: ${nis}`;
+        // Truncate content to 100 chars for notification body
+        const truncatedContent = content.length > 100 ? `${content.substring(0, 97)}...` : content;
+        // Construct body with content and date
+        const body = `${truncatedContent}\n${tanggalPelanggaran}`;
 
-      promises.push(
-        (async () => {
-          try {
-            const message = {
-              app_id: oneSignalAppId,
-              included_segments: ["All"],
-              contents: { en: body },
-              headings: { en: title },
-              data: {
-                notificationId: notificationKey,
-                name: name,
-                date: date,
-                imageUrl: imageUrl,
-                content: content, // Full content in data
-              },
-              ios_sound: "default",
-              android_sound: "default",
-            };
+        console.log("Data baru di /violations:", violationData);
 
-            if (imageUrl) {
-              message.big_picture = imageUrl; // Image displayed below content on Android
-              message.ios_attachments = { image: imageUrl }; // Image displayed below content on iOS
-            }
-
-            const response = await axios.post(
-              "https://onesignal.com/api/v1/notifications",
-              message,
-              {
-                headers: {
-                  Authorization: `Basic ${oneSignalApiKey}`,
-                  "Content-Type": "application/json",
+        promises.push(
+          (async () => {
+            try {
+              const message = {
+                app_id: oneSignalAppId,
+                included_segments: ["All"],
+                contents: { en: body },
+                headings: { en: title },
+                data: {
+                  violationId: violationKey,
+                  nama: nama,
+                  jenisPelanggaran: jenisPelanggaran,
+                  tanggalPelanggaran: tanggalPelanggaran,
+                  fotoUrl: fotoUrl,
+                  kelas: kelas,
+                  nis: nis,
+                  content: content,
                 },
-              }
-            );
+                ios_sound: "default",
+                android_sound: "default",
+              };
 
-            console.log("Notifikasi dikirim:", response.data);
-            await notificationsRef.child(notificationKey).update({ sent: true });
-          } catch (error) {
-            console.error("Gagal mengirim notifikasi:", error);
-          }
-        })()
-      );
-    });
+              if (fotoUrl) {
+                message.big_picture = fotoUrl;
+                message.ios_attachments = { image: fotoUrl };
+              }
+
+              const response = await axios.post(
+                "https://onesignal.com/api/v1/notifications",
+                message,
+                {
+                  headers: {
+                    Authorization: `Basic ${oneSignalApiKey}`,
+                    "Content-Type": "application/json",
+                  },
+                }
+              );
+
+              console.log("Notifikasi pelanggaran dikirim:", response.data);
+              await violationsRef.child(violationKey).update({ sent: true });
+            } catch (error) {
+              console.error("Gagal mengirim notifikasi pelanggaran:", error);
+            }
+          })()
+        );
+      });
+    } else {
+      console.log("No violations to process");
+    }
 
     await Promise.all(promises);
-    return { success: true, message: "Processed notifications" };
+
+    if (promises.length === 0) {
+      return { success: true, message: "No notifications or violations to process" };
+    }
+
+    return { success: true, message: "Processed notifications and violations" };
   } catch (error) {
-    console.error("Failed to process general notifications:", error);
-    return { success: false, error: "Gagal memproses notifikasi umum" };
+    console.error("Failed to process general notifications or violations:", error);
+    return { success: false, error: "Gagal memproses notifikasi umum atau pelanggaran" };
   }
 }
 
