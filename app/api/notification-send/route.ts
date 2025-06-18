@@ -196,12 +196,9 @@ async function sendGeneralNotification() {
           const fotoUrl = violationData.fotoUrl || "";
           const kelas = violationData.kelas || "Tidak diketahui";
           const nis = violationData.nis || "Tidak diketahui";
-          const title = `Pelanggaran Baru oleh ${nama}`;
-          // Construct content with violation details
-          const content = `Pelanggaran: ${jenisPelanggaran}\nNama: ${nama}\nKelas: ${kelas}\nNIS: ${nis}`;
-          // Truncate content to 100 chars for notification body
+          const title = `Pelanggaran ${jenisPelanggaran} oleh ${nama}`;
+          const content = `Nama: ${nama}\nKelas: ${kelas}`;
           const truncatedContent = content.length > 100 ? `${content.substring(0, 97)}...` : content;
-          // Construct body with content and date
           const body = `${truncatedContent}\n${tanggalPelanggaran}`;
 
           console.log(`Data baru di /pelanggaran/${date}/${violationKey}:`, violationData);
