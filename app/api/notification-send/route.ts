@@ -124,9 +124,10 @@ async function sendGeneralNotification() {
       const imageUrl = notificationData.imageUrl || "";
       const content = notificationData.content || "";
       const title = `Post Baru dari ${name}`;
-      // Truncate content to 100 chars to fit OneSignal limits
+      // Truncate content to 100 chars for notification body
       const truncatedContent = content.length > 100 ? `${content.substring(0, 97)}...` : content;
-      const body = content ? `${truncatedContent}`
+      // Construct body with content and date
+      const body = `${truncatedContent}\n\n${date}`;
 
       console.log("Data baru di /notifications:", notificationData);
 
@@ -150,8 +151,8 @@ async function sendGeneralNotification() {
             };
 
             if (imageUrl) {
-              message.big_picture = imageUrl;
-              message.ios_attachments = { image: imageUrl };
+              message.big_picture = imageUrl; // Image displayed below content on Android
+              message.ios_attachments = { image: imageUrl }; // Image displayed below content on iOS
             }
 
             const response = await axios.post(
