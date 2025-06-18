@@ -176,78 +176,82 @@ async function sendGeneralNotification() {
       console.log("No general notifications to process");
     }
 
-    // Process violation notifications from /violations
-    const violationsRef = db.ref("/violations");
+    // Process violation notifications from /pelanggaran
+    const violationsRef = db.ref("/pelanggaran");
     const violationSnapshot = await violationsRef.once("value");
 
     if (violationSnapshot.exists()) {
-      violationSnapshot.forEach((violationSnapshot) => {
-        const violationData = violationSnapshot.val();
-        const violationKey = violationSnapshot.key;
+      violationSnapshot.forEach((dateSnapshot) => {
+        const date = dateSnapshot.key; // e.g., "2025-06-13"
+        dateSnapshot.forEach((violationSnapshot) => {
+          const violationData = violationSnapshot.val();
+          const violationKey = violationSnapshot.key; // e.g., "Dims", "bhhh", "dim"
 
-        if (violationData.sent) return;
+          // Skip if already sent
+          if (violationData.sent) return;
 
-        const nama = violationData.nama || "Unknown";
-        const jenisPelanggaran = violationData.jenisPelanggaran || "Tidak diketahui";
-        const tanggalPelanggaran = violationData.tanggalPelanggaran || "No date";
-        const fotoUrl = violationData.fotoUrl || "";
-        const kelas = violationData.kelas || "Tidak diketahui";
-        const nis = violationData.nis || "Tidak diketahui";
-        const title = `Pelanggaran Baru oleh ${nama}`;
-        // Construct content with violation details
-        const content = `Pelanggaran: ${jenisPelanggaran}\nNama: ${nama}\nKelas: ${kelas}\nNIS: ${nis}`;
-        // Truncate content to 100 chars for notification body
-        const truncatedContent = content.length > 100 ? `${content.substring(0, 97)}...` : content;
-        // Construct body with content and date
-        const body = `${truncatedContent}\n${tanggalPelanggaran}`;
+          const nama = violationData.nama || "Unknown";
+          const jenisPelanggaran = violationData.jenisPelanggaran || "Tidak diketahui";
+          const tanggalPelanggaran = violationData.tanggalPelanggaran || date || "No date";
+          const fotoUrl = violationData.fotoUrl || "";
+          const kelas = violationData.kelas || "Tidak diketahui";
+          const nis = violationData.nis || "Tidak diketahui";
+          const title = `Pelanggaran Baru oleh ${nama}`;
+          // Construct content with violation details
+          const content = `Pelanggaran: ${jenisPelanggaran}\nNama: ${nama}\nKelas: ${kelas}\nNIS: ${nis}`;
+          // Truncate content to 100 chars for notification body
+          const truncatedContent = content.length > 100 ? `${content.substring(0, 97)}...` : content;
+          // Construct body with content and date
+          const body = `${truncatedContent}\n${tanggalPelanggaran}`;
 
-        console.log("Data baru di /violations:", violationData);
+          console.log(`Data baru di /pelanggaran/${date}/${violationKey}:`, violationData);
 
-        promises.push(
-          (async () => {
-            try {
-              const message = {
-                app_id: oneSignalAppId,
-                included_segments: ["All"],
-                contents: { en: body },
-                headings: { en: title },
-                data: {
-                  violationId: violationKey,
-                  nama: nama,
-                  jenisPelanggaran: jenisPelanggaran,
-                  tanggalPelanggaran: tanggalPelanggaran,
-                  fotoUrl: fotoUrl,
-                  kelas: kelas,
-                  nis: nis,
-                  content: content,
-                },
-                ios_sound: "default",
-                android_sound: "default",
-              };
-
-              if (fotoUrl) {
-                message.big_picture = fotoUrl;
-                message.ios_attachments = { image: fotoUrl };
-              }
-
-              const response = await axios.post(
-                "https://onesignal.com/api/v1/notifications",
-                message,
-                {
-                  headers: {
-                    Authorization: `Basic ${oneSignalApiKey}`,
-                    "Content-Type": "application/json",
+          promises.push(
+            (async () => {
+              try {
+                const message = {
+                  app_id: oneSignalAppId,
+                  included_segments: ["All"],
+                  contents: { en: body },
+                  headings: { en: title },
+                  data: {
+                    violationId: `${date}/${violationKey}`,
+                    nama: nama,
+                    jenisPelanggaran: jenisPelanggaran,
+                    tanggalPelanggaran: tanggalPelanggaran,
+                    fotoUrl: fotoUrl,
+                    kelas: kelas,
+                    nis: nis,
+                    content: content,
                   },
-                }
-              );
+                  ios_sound: "default",
+                  android_sound: "default",
+                };
 
-              console.log("Notifikasi pelanggaran dikirim:", response.data);
-              await violationsRef.child(violationKey).update({ sent: true });
-            } catch (error) {
-              console.error("Gagal mengirim notifikasi pelanggaran:", error);
-            }
-          })()
-        );
+                if (fotoUrl) {
+                  message.big_picture = fotoUrl;
+                  message.ios_attachments = { image: fotoUrl };
+                }
+
+                const response = await axios.post(
+                  "https://onesignal.com/api/v1/notifications",
+                  message,
+                  {
+                    headers: {
+                      Authorization: `Basic ${oneSignalApiKey}`,
+                      "Content-Type": "application/json",
+                    },
+                  }
+                );
+
+                console.log(`Notifikasi pelanggaran dikirim untuk ${nama}:`, response.data);
+                await violationsRef.child(date).child(violationKey).update({ sent: true });
+              } catch (error) {
+                console.error(`Gagal mengirim notifikasi pelanggaran untuk ${nama}:`, error);
+              }
+            })()
+          );
+        });
       });
     } else {
       console.log("No violations to process");
