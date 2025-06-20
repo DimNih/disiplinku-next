@@ -150,8 +150,8 @@ async function sendGeneralNotification() {
                 },
                 ios_sound: "default",
                 android_sound: "default",
-                android_small_icon: "ic_stat_onesignal_default", // Fallback ke ikon default
-                mutable_content: true, // Mengaktifkan styling notifikasi kustom iOS
+                android_small_icon: photoUrl,
+                mutable_content: true, 
               };
 
               if (imageUrl) {
@@ -162,6 +162,10 @@ async function sendGeneralNotification() {
               if (photoUrl) {
                 // Untuk iOS, tambahkan foto profil sebagai thumbnail
                 if (!message.ios_attachments) message.ios_attachments = {};
+                // untuk android
+                // OneSignal expects a string for android_small_icon, usually the resource name in your app or a URL for large_icon
+                // If you want to use a custom image, use 'android_large_icon' instead
+                message.android_large_icon = photoUrl; // Use photoUrl as large icon for Android
                 message.ios_attachments.profile = photoUrl; // Foto profil untuk iOS
               }
 
@@ -217,7 +221,6 @@ async function sendGeneralNotification() {
           const body = `${truncatedContent}\n${tanggalPelanggaran}`;
 
           console.log(`Data baru di /pelanggaran/${date}/${violationKey}:`, violationData);
-          console.log("Foto URL untuk notifikasi pelanggaran:", fotoUrl);
 
           promises.push(
             (async () => {
