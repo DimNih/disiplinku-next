@@ -120,8 +120,9 @@ async function sendGeneralNotification() {
         const name = notificationData.name || "Unknown";
         const date = notificationData.date || "No date";
         const imageUrl = notificationData.imageUrl || "";
+        const photoUrl = notificationData.photoUrl || "";
         const content = notificationData.content || "";
-        const title = `Berita Baru dari ${name}`;
+        const title = `${name}`; // Mimic social media style: just the name
         // Truncate content to 100 chars for notification body
         const truncatedContent = content.length > 100 ? `${content.substring(0, 97)}...` : content;
         // Construct body with content and date
@@ -142,15 +143,24 @@ async function sendGeneralNotification() {
                   name: name,
                   date: date,
                   imageUrl: imageUrl,
+                  photoUrl: photoUrl,
                   content: content,
                 },
                 ios_sound: "default",
                 android_sound: "default",
+                android_small_icon: photoUrl || "ic_stat_onesignal_default", // Profile photo for Android
+                mutable_content: true, // Enable custom iOS notification styling
               };
 
               if (imageUrl) {
-                message.big_picture = imageUrl;
-                message.ios_attachments = { image: imageUrl };
+                message.big_picture = imageUrl; // Large image below content
+                message.ios_attachments = { image: imageUrl }; // Large image for iOS
+              }
+
+              if (photoUrl) {
+                // For iOS, add profile photo as a thumbnail
+                if (!message.ios_attachments) message.ios_attachments = {};
+                message.ios_attachments.profile = photoUrl; // Profile photo for iOS
               }
 
               const response = await axios.post(
@@ -196,10 +206,13 @@ async function sendGeneralNotification() {
           const fotoUrl = violationData.fotoUrl || "";
           const kelas = violationData.kelas || "Tidak diketahui";
           const nis = violationData.nis || "Tidak diketahui";
-          const title = `Pelanggaran ${jenisPelanggaran} oleh ${nama}`;
-          const content = `Nama: ${nama} dari Kelas: ${kelas} \n${tanggalPelanggaran}`;
+          const title = `${nama}`; // Mimic social media style: just the name
+          // Construct content with violation details
+          const content = `Pelanggaran: ${jenisPelanggaran}\nNama: ${nama}\nKelas: ${kelas}\nNIS: ${nis}`;
+          // Truncate content to 100 chars for notification body
           const truncatedContent = content.length > 100 ? `${content.substring(0, 97)}...` : content;
-          const body = `${truncatedContent}`;
+          // Construct body with content and date
+          const body = `${truncatedContent}\n${tanggalPelanggaran}`;
 
           console.log(`Data baru di /pelanggaran/${date}/${violationKey}:`, violationData);
 
@@ -223,23 +236,26 @@ async function sendGeneralNotification() {
                   },
                   ios_sound: "default",
                   android_sound: "default",
+                  android_small_icon: fotoUrl || "ic_stat_onesignal_default", // Profile photo for Android
+                  mutable_content: true, // Enable custom iOS notification styling
                 };
 
                 if (fotoUrl) {
-                  message.big_picture = fotoUrl;
-                  message.ios_attachments = { image: fotoUrl };
+                  message.big_picture = fotoUrl; // Large image below content
+                  message.ios_attachments = { image: fotoUrl }; // Large image for iOS
+                  message.ios_attachments.profile = fotoUrl; // Profile photo for iOS
                 }
 
                 const response = await axios.post(
                   "https://onesignal.com/api/v1/notifications",
                   message,
                   {
-                    headers: {
-                      Authorization: `Basic ${oneSignalApiKey}`,
-                      "Content-Type": "application/json",
-                    },
-                  }
-                );
+                  headers: {
+                    Authorization: `Basic ${oneSignalApiKey}`,
+                    "Content-Type": "application/json",
+                  },
+                }
+              );
 
                 console.log(`Notifikasi pelanggaran dikirim untuk ${nama}:`, response.data);
                 await violationsRef.child(date).child(violationKey).update({ sent: true });
